@@ -1,0 +1,45 @@
+---
+  - hosts: all
+    tasks:
+      - name: Get Instance Details
+        uri:
+          method: GET
+          body_format: json
+          url: "{{morpheus['morpheus']['applianceUrl']}}/api/instances/{{morpheus['customOptions']['target']}}"
+          headers:
+            Authorization: "BEARER {{ lookup('cypher','secret=secret/Bearer') }}"
+        register: data
+
+  - hosts: all
+    vars:
+      source_db: "{{morpheus['customOptions']['sourceDB']}}"
+      source_user: "{{morpheus['customOptions']['sourceUser']}}"
+      source_pw: "{{morpheus['customOptions']['sourcePassword']}}"
+      target_user: "{{morpheus['customOptions']['targetUser']}}"
+      target_pw: "{{morpheus['customOptions']['targetPassword']}}"
+    become: true
+    tasks:
+      - name: Install Python MySQL CentOS/RHEL
+        yum:
+          name: MySQL-python
+          state: installed
+        become: yes
+        become_method: sudo
+
+      - name: Create DB Backup
+        mysql_db:
+          name: "{{source_db}}"
+          state: dump
+          target: "/tmp/{{source_db}}.sql"
+          login_host: localhost
+          login_user: "{{source_user}}"
+          login_password: "{{source_pw}}"
+
+      - name: Import the Database
+        mysql_db:
+          name: "{{source_db}}"
+          state: import
+          target: "/tmp/{{source_db}}.sql"
+          login_host: "{{data.json.instance.connectionInfo[0].ip}}"
+          login_user: "{{target_user}}"
+          login_password: "{{target_pw}}"
